@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export interface PersonInput {
@@ -63,6 +64,7 @@ function getFriendlyError(error: unknown): string {
 }
 
 export async function getAllPeople(): Promise<PersonRecord[]> {
+  noStore();
   try {
     const results = await prisma.person.findMany({
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
@@ -76,6 +78,7 @@ export async function getAllPeople(): Promise<PersonRecord[]> {
 }
 
 export async function searchPeople(searchTerm: string): Promise<PersonRecord[]> {
+  noStore();
   if (!searchTerm.trim()) {
     return [];
   }
@@ -132,9 +135,12 @@ export async function createPerson(input: PersonInput): Promise<PersonRecord> {
     const normalizedInput = normalizePersonInput(input);
     assertRequiredFields(normalizedInput);
 
-    return (await prisma.person.create({
+    const result = (await prisma.person.create({
       data: normalizedInput,
     })) as PersonRecord;
+
+    revalidatePath("/search");
+    return result;
   } catch (error) {
     const message = getFriendlyError(error);
     console.error("Create person error:", error);
@@ -150,10 +156,13 @@ export async function updatePerson(
     const normalizedInput = normalizePersonInput(input);
     assertRequiredFields(normalizedInput);
 
-    return (await prisma.person.update({
+    const result = (await prisma.person.update({
       where: { id },
       data: normalizedInput,
     })) as PersonRecord;
+
+    revalidatePath("/search");
+    return result;
   } catch (error) {
     const message = getFriendlyError(error);
     console.error("Update person error:", error);
@@ -166,6 +175,8 @@ export async function deletePerson(id: number) {
     await prisma.person.delete({
       where: { id },
     });
+
+    revalidatePath("/search");
   } catch (error) {
     const message = getFriendlyError(error);
     console.error("Delete person error:", error);
